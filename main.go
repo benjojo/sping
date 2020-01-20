@@ -85,7 +85,31 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 	}
 
 	fmt.Printf("[%v] %#v\n", rxAddr.String(), rx)
+	pI := pingInfo{
+		ID: rx.ID,
+		TX: rx.TXTime,
+		RX: timeRX,
+	}
 
+	session := sessionMap[rx.Session]
+	session.LastAcks[nextAckSlot(session.LastAcks)] = pI
+}
+
+func nextAckSlot(in [32]pingInfo) int {
+	lowestN := -1
+	lowest := uint8(0)
+	for n, v := range in {
+		if v.ID == 0 {
+			return n
+		}
+
+		if v.ID > lowest {
+			lowestN = n
+			lowest = v.ID
+		}
+	}
+
+	return lowestN
 }
 
 type pingStruct struct {
