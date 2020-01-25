@@ -76,15 +76,15 @@ var ntpServers = []string{
 	"17.253.114.253", //krsel6-ntp-002.aaplimg.com
 }
 
-type NTPResult struct {
+type ntpResult struct {
 	RTT    time.Duration
 	Offset time.Duration
 	Host   string
 }
 
-var timeSyncs map[string]NTPResult
+var timeSyncs map[string]ntpResult
 
-type byNTPRTT []NTPResult
+type byNTPRTT []ntpResult
 
 func (s byNTPRTT) Len() int {
 	return len(s)
@@ -96,7 +96,7 @@ func (s byNTPRTT) Less(i, j int) bool {
 	return s[i].RTT < s[j].RTT
 }
 
-type byNTPOffset []NTPResult
+type byNTPOffset []ntpResult
 
 func (s byNTPOffset) Len() int {
 	return len(s)
@@ -110,7 +110,7 @@ func (s byNTPOffset) Less(i, j int) bool {
 
 // Returns out offset against apple's NTP (+ GPS) servers
 func calibrateAgainstApple() int {
-	timeSyncs = make(map[string]NTPResult)
+	timeSyncs = make(map[string]ntpResult)
 	maplock := sync.Mutex{}
 
 	log.Printf("Calibrating myself against Apple")
@@ -121,7 +121,7 @@ func calibrateAgainstApple() int {
 				return
 			}
 			maplock.Lock()
-			timeSyncs[server] = NTPResult{
+			timeSyncs[server] = ntpResult{
 				RTT:    RTT,
 				Offset: offset,
 				Host:   server,
@@ -136,13 +136,13 @@ func calibrateAgainstApple() int {
 	// now we have a NTP resp from all of them, let's figure out how out of sync we are with GPS
 	log.Printf("-----------------------------------------")
 
-	NTPresArray := make([]NTPResult, 0)
+	NTPresArray := make([]ntpResult, 0)
 	for _, v := range timeSyncs {
 		NTPresArray = append(NTPresArray, v)
 	}
 
 	sort.Sort(byNTPRTT(NTPresArray))
-	considerableNTPresponces := make([]NTPResult, 5)
+	considerableNTPresponces := make([]ntpResult, 5)
 
 	for count, Result := range NTPresArray {
 		fmt.Printf("[%s] Offset: %v\t\tRTT: %v\n", Result.Host, Result.Offset, Result.RTT)
