@@ -110,6 +110,9 @@ func (s byNTPOffset) Less(i, j int) bool {
 
 // Returns out offset against apple's NTP (+ GPS) servers
 func calibrateAgainstApple() int {
+	lastSync = time.Now()
+	return 1
+
 	timeSyncs = make(map[string]ntpResult)
 	maplock := sync.Mutex{}
 
@@ -161,6 +164,7 @@ func calibrateAgainstApple() int {
 		}
 	}
 
+	lastSync = time.Now()
 	return int(considerableNTPresponces[2].Offset)
 }
 
