@@ -21,6 +21,8 @@ import (
 */
 var packetLimiter = rate.NewLimiter(100, 300)
 
+var debugFlagSlotShow = flag.Bool("debug.showslots", false, "Show incoming packet latency slots")
+
 func main() {
 	udpPPSin := flag.Int("udp.pps", 100, "max inbound PPS that can be processed at once")
 	peers := flag.String("peers", "", "List of IPs that are peers")
@@ -234,8 +236,6 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 		sessionMap[rx.Session] = ses
 	}
 
-	// fmt.Printf("[%v] %#v\n", rxAddr.String(), rx)
-	log.Printf("RX diff is %s", timeRX.Sub(rx.TXTime))
 	pI := pingInfo{
 		ID: rx.ID,
 		TX: rx.TXTime,
@@ -243,67 +243,35 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 	}
 
 	session := sessionMap[rx.Session]
+	RXL, TXL, _, _, _ := getStats(timeRX, rx, session)
+	log.Printf("[%s] RX: %s TX: %s ", session.PeerAddress, RXL, TXL) // [Loss RX: %d/%d | Loss TX %d/%d]
+
 	session.LastAcks[session.getNextAckSlot()] = pI
 	sessionMap[rx.Session] = session
 
-	for n, v := range session.LastAcks {
-		fmt.Printf("\t[Slot %d] ID: %d - TX: %s\n", n, v.ID, v.TX.Sub(v.RX))
+	if *debugFlagSlotShow {
+		for n, v := range session.LastAcks {
+			fmt.Printf("\t[Slot %d] ID: %d - TX: %s\n", n, v.ID, v.TX.Sub(v.RX))
+		}
 	}
 }
 
-/*
-	[Slot 0]  ID: 225 - TX: -52.440514ms
-	[Slot 1]  ID: 226 - TX: -52.684686ms
-	[Slot 2]  ID: 227 - TX: -52.85241ms
-	[Slot 3]  ID: 228 - TX: -56.673241ms
-	[Slot 4]  ID: 229 - TX: -52.393849ms
-	[Slot 5]  ID: 230 - TX: -52.520913ms
-	[Slot 6]  ID: 231 - TX: -54.022304ms
-	[Slot 7]  ID: 232 - TX: -52.65099ms
-	[Slot 8]  ID: 233 - TX: -52.424397ms
-	[Slot 9]  ID: 234 - TX: -52.13888ms
-	[Slot 10] ID: 235 - TX: -52.338799ms
-	[Slot 11] ID: 236 - TX: -52.595029ms
-	[Slot 12] ID: 237 - TX: -54.515562ms
-	[Slot 13] ID: 238 - TX: -52.545304ms
-	[Slot 14] ID: 239 - TX: -53.134174ms
-	[Slot 15] ID: 240 - TX: -52.737777ms
-	[Slot 16] ID: 241 - TX: -53.157872ms
-	[Slot 17] ID: 242 - TX: -52.686319ms
-	[Slot 18] ID: 243 - TX: -52.347642ms
-	[Slot 19] ID: 244 - TX: -52.32119ms
-	[Slot 20] ID: 245 - TX: -52.745323ms
-	[Slot 21] ID: 246 - TX: -52.505479ms
-	[Slot 22] ID: 247 - TX: -52.736172ms
-	[Slot 23] ID: 248 - TX: -52.727409ms
-	[Slot 24] ID: 249 - TX: -52.374326ms
-	[Slot 25] ID: 250 - TX: -52.446681ms
-	[Slot 26] ID: 251 - TX: -52.671936ms
-	[Slot 27] ID: 252 - TX: -52.591185ms
-	[Slot 28] ID: 253 - TX: -52.893442ms
-	[Slot 29] ID: 254 - TX: -52.105233ms
-	[Slot 30] ID: 255 - TX: -52.46667ms
-	[Slot 31] ID: 148 - TX: -52.599296ms
-*/
+func getStats(timeRX time.Time, rx pingStruct, ses *session) (RXLatency time.Duration, TXLatency time.Duration, RXLoss int, TXLoss int, TotalSent int) {
+	RXLatency = timeRX.Sub(rx.TXTime)
 
-func nextAckSlot(in [32]pingInfo) int {
-	lowestN := 0
-	lowestID := uint8(255)
-
-	for n, v := range in {
-		if v.ID == 0 {
-			return n
+	latest := time.Hour * 24
+	for _, v := range rx.LastAcks {
+		if v.RX.IsZero() {
+			continue
 		}
 
-		if v.ID < lowestID {
-			lowestN = n
-			lowestID = v.ID
+		if time.Since(v.TX) < latest {
+			TXLatency = v.RX.Sub(v.TX)
+			latest = time.Since(v.TX)
 		}
 	}
 
-	log.Printf("next slot:%d", lowestN)
-
-	return lowestN
+	return RXLatency, TXLatency, 0, 0, 0
 }
 
 type pingStruct struct {
