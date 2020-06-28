@@ -225,15 +225,19 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 		return
 	}
 
-	if !sessionMap[rx.Session].Init {
-		log.Printf("Setting session as active")
-		if sessionMap[rx.Session].SessionID != rx.Session {
-			log.Printf("Invalid packet for the session ID from %v", rxAddr.String())
-			return
+	if sessionMap[rx.Session] != nil {
+		if !sessionMap[rx.Session].Init {
+			log.Printf("Setting session as active")
+			if sessionMap[rx.Session].SessionID != rx.Session {
+				log.Printf("Invalid packet for the session ID from %v", rxAddr.String())
+				return
+			}
+			ses := sessionMap[rx.Session]
+			ses.Init = true
+			sessionMap[rx.Session] = ses
 		}
-		ses := sessionMap[rx.Session]
-		ses.Init = true
-		sessionMap[rx.Session] = ses
+	} else {
+		return
 	}
 
 	pI := pingInfo{
