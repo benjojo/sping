@@ -100,7 +100,7 @@ func (s *session) sendPackets() {
 		}
 
 		// Send pings
-		s.CurrentID++
+		s.CurrentID = uint8(time.Now().Unix()%255) + 1
 		packet := pingStruct{
 			Magic:    11181,
 			Session:  s.SessionID,
@@ -247,9 +247,8 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 	}
 
 	session := sessionMap[rx.Session]
-	RXL, TXL, _, _, _ := getStats(timeRX, rx, session)
-	log.Printf("[%s] RX: %s TX: %s ", session.PeerAddress, RXL, TXL) // [Loss RX: %d/%d | Loss TX %d/%d]
-
+	RXL, TXL, RXLoss, TXLoss, exchanges := getStats(timeRX, rx, session)
+	log.Printf("[%s] RX: %s TX: %s [Loss RX: %d/%d | Loss TX %d/%d]", session.PeerAddress, RXL, TXL, RXLoss, exchanges, TXLoss, exchanges)
 	session.LastAcks[session.getNextAckSlot()] = pI
 	sessionMap[rx.Session] = session
 
@@ -275,7 +274,47 @@ func getStats(timeRX time.Time, rx pingStruct, ses *session) (RXLatency time.Dur
 		}
 	}
 
-	return RXLatency, TXLatency, 0, 0, 0
+	RXLoss, TXLoss, TotalSent = getLoss(rx, ses)
+
+	return RXLatency, TXLatency, RXLoss, TXLoss, TotalSent
+}
+
+func getLoss(rx pingStruct, ses *session) (RXLoss int, TXLoss int, TotalSent int) {
+
+	TipID := uint8(time.Now().Unix()%255) + 1
+
+	// Don't send loss stats when we don't have enough info to operate with
+	if dumbLastAckSearchForID(0, ses.LastAcks) {
+		return 0, 0, 0
+	}
+
+	// Okay so we have enough data, let's search backwards (avoiding 0)
+	Starting := TipID - 32
+	i := Starting
+	for {
+		i++
+		if i == TipID {
+			break
+		}
+		if !dumbLastAckSearchForID(i, rx.LastAcks) {
+			TXLoss++
+		}
+		if !dumbLastAckSearchForID(i, ses.LastAcks) {
+			RXLoss++
+		}
+	}
+
+	return RXLoss, TXLoss, 32
+}
+
+func dumbLastAckSearchForID(targetID uint8, LastAcks [32]pingInfo) bool {
+	for _, v := range LastAcks {
+		if v.ID == targetID {
+			return true
+		}
+	}
+
+	return false
 }
 
 type pingStruct struct {
