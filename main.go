@@ -293,6 +293,9 @@ func getLoss(rx pingStruct, ses *session) (RXLoss int, TXLoss int, TotalSent int
 	i := Starting
 	for {
 		i++
+		if i == 0 {
+			i++
+		}
 		if i == TipID {
 			break
 		}
