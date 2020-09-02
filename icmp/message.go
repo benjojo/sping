@@ -121,6 +121,9 @@ var parseFns = map[Type]func(int, Type, []byte) (MessageBody, error){
 	ipv4.ICMPTypeExtendedEchoRequest: parseExtendedEchoRequest,
 	ipv4.ICMPTypeExtendedEchoReply:   parseExtendedEchoReply,
 
+	ipv4.ICMPTypeTimestamp:      parseTimestamp,
+	ipv4.ICMPTypeTimestampReply: parseTimestamp,
+
 	ipv6.ICMPTypeDestinationUnreachable: parseDstUnreach,
 	ipv6.ICMPTypePacketTooBig:           parsePacketTooBig,
 	ipv6.ICMPTypeTimeExceeded:           parseTimeExceeded,
