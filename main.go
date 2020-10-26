@@ -64,7 +64,11 @@ type session struct {
 	CurrentID   uint8
 	SessionID   uint32
 	nextAckSlot int
+	ReplyWith   net.PacketConn
+	ReplyTo     net.Addr
 }
+
+var globalReplyWith *net.PacketConn
 
 func (s *session) getNextAckSlot() int {
 	if s.nextAckSlot != 31 {
@@ -114,7 +118,14 @@ func (s *session) sendPackets() {
 			log.Fatalf("Failed to marshal packet %v / %#v", err, packet)
 		}
 
-		udpConn.Write(b)
+		if s.ReplyTo != nil {
+			s.ReplyWith.WriteTo(b, s.ReplyTo)
+		} else if globalReplyWith != nil {
+			a := *globalReplyWith
+			a.WriteTo(b, peerAddr)
+		} else {
+			udpConn.Write(b)
+		}
 	}
 }
 
@@ -188,11 +199,15 @@ func startSession(host string) {
 var sessionMap map[uint32]*session
 var sessionLock sync.RWMutex
 
+var bindAddr = flag.String("listenAddr", "[::]:6924", "Listening address")
+
 func listenAndRoute() {
-	uListener, err := net.ListenPacket("udp", "[::]:6924")
+	uListener, err := net.ListenPacket("udp", *bindAddr)
 	if err != nil {
 		log.Fatalf("Failed to listen on UDP port %v", err)
 	}
+
+	globalReplyWith = &uListener
 
 	for {
 		buf := make([]byte, 10000)
@@ -206,11 +221,11 @@ func listenAndRoute() {
 			continue
 		}
 
-		go handlePacket(buf[:n], rxAddr)
+		go handlePacket(buf[:n], rxAddr, uListener)
 	}
 }
 
-func handlePacket(buf []byte, rxAddr net.Addr) {
+func handlePacket(buf []byte, rxAddr net.Addr, lSocket net.PacketConn) {
 	timeRX := timeNowCorrected()
 
 	rx := pingStruct{}
@@ -250,6 +265,9 @@ func handlePacket(buf []byte, rxAddr net.Addr) {
 	RXL, TXL, RXLoss, TXLoss, exchanges := getStats(timeRX, rx, session)
 	log.Printf("[%s] RX: %s TX: %s [Loss RX: %d/%d | Loss TX %d/%d]", session.PeerAddress, RXL, TXL, RXLoss, exchanges, TXLoss, exchanges)
 	session.LastAcks[session.getNextAckSlot()] = pI
+	session.ReplyWith = lSocket
+	session.ReplyTo = rxAddr
+
 	sessionMap[rx.Session] = session
 
 	if *debugFlagSlotShow {
