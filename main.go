@@ -92,9 +92,13 @@ func (s *session) sendPackets() {
 
 	startTime := time.Now()
 	for {
-		a := timeNowCorrected().Unix()
-		u := time.Until(time.Unix(a+1, 0).Add(timeOffset * -1))
-		time.Sleep(u)
+		if *usePPS {
+			waitForPPSPulse()
+		} else {
+			a := timeNowCorrected().Unix()
+			u := time.Until(time.Unix(a+1, 0).Add(timeOffset * -1))
+			time.Sleep(u)
+		}
 
 		if !s.Init {
 			if time.Since(startTime) > time.Second*30 {
