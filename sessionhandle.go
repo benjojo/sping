@@ -10,7 +10,7 @@ import (
 )
 
 func listenOnTCP() {
-	tListener, err := net.Listen("tcp", "[::]:6924")
+	tListener, err := net.Listen("tcp", *bindAddr)
 	if err != nil {
 		log.Fatalf("Failed to listen on TCP port %v", err)
 	}
