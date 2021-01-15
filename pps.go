@@ -40,6 +40,7 @@ func setupPPS() {
 
 var ppsFD *int
 var ppsFile *os.File // To stop GC
+var ppsDebug = flag.Bool("pps.debug", false, "Enable debug output for PPS inputs")
 
 func waitForPPSPulse() time.Time {
 	if ppsFD == nil {
@@ -53,7 +54,9 @@ func waitForPPSPulse() time.Time {
 	if err != 0 {
 		log.Printf("PPS Pulse failed! %v / FD %v", err, *ppsFD)
 	}
-	log.Printf("%#v", a)
+	if *ppsDebug {
+		log.Printf("%#v", a)
+	}
 	return time.Unix(a.Info.Assert_tu.Sec, int64(a.Info.Assert_tu.Nsec))
 }
 
