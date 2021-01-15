@@ -22,6 +22,7 @@ func setupPPS() {
 	FD := f.Fd()
 	a := int(FD)
 	ppsFD = &a
+	ppsFile = f
 
 	PP := PPSKParams{}
 	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_GETPARAMS), uintptr(unsafe.Pointer(&PP)))
@@ -38,6 +39,7 @@ func setupPPS() {
 }
 
 var ppsFD *int
+var ppsFile *os.File // To stop GC
 
 func waitForPPSPulse() time.Time {
 	if ppsFD == nil {
@@ -45,8 +47,12 @@ func waitForPPSPulse() time.Time {
 	}
 
 	a := PPSFData{}
-	a.Timeout.Sec = time.Now().Unix() + 2
-	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_FETCH), uintptr(unsafe.Pointer(&a)))
+	// a.Timeout.Sec = time.Now().Unix() + 2
+	a.Timeout.Sec = 3
+	_, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_FETCH), uintptr(unsafe.Pointer(&a)))
+	if err != 0 {
+		log.Printf("PPS Pulse failed! %v / FD %v", err, *ppsFD)
+	}
 	log.Printf("%#v", a)
 	return time.Unix(a.Info.Assert_tu.Sec, int64(a.Info.Assert_tu.Nsec))
 }

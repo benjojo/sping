@@ -26,8 +26,12 @@ var debugFlagSlotShow = flag.Bool("debug.showslots", false, "Show incoming packe
 func main() {
 	udpPPSin := flag.Int("udp.pps", 100, "max inbound PPS that can be processed at once")
 	peers := flag.String("peers", "", "List of IPs that are peers")
-
 	flag.Parse()
+
+	if *usePPS && !*flagClockIsPerfect {
+		*flagClockIsPerfect = true
+		log.Printf("PPS mode is in use, Automatically assuming system clock is perfect")
+	}
 
 	sessionMap = make(map[uint32]*session)
 
