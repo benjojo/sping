@@ -34,7 +34,7 @@ type handshakeStruct struct {
 func handleTCPconnection(conn net.Conn) {
 	defer conn.Close()
 
-	_, err := conn.Write([]byte("sping-0.1-https://github.com/benjojo/sping\n"))
+	_, err := conn.Write([]byte("sping-0.2-https://github.com/benjojo/sping\n"))
 	if err != nil {
 		return
 	}
@@ -56,7 +56,7 @@ func handleTCPconnection(conn net.Conn) {
 		return
 	}
 
-	if handshake.Version != 1 {
+	if handshake.Version != 2 {
 		log.Printf("Unsupported handshake (%#v) on %#v", handshake.Version, conn.RemoteAddr().String())
 		return
 	}
@@ -65,7 +65,7 @@ func handleTCPconnection(conn net.Conn) {
 
 	returnPacket := handshakeStruct{
 		Magic:   11181,
-		Version: 1,
+		Version: 2,
 		Session: nSes,
 	}
 

@@ -165,7 +165,7 @@ func startSession(host string) {
 
 	startPacket := handshakeStruct{
 		Magic:   11181,
-		Version: 1,
+		Version: 2,
 		Session: 0,
 	}
 

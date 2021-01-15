@@ -7,5 +7,6 @@ require (
 	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/vmihailenco/msgpack/v4 v4.3.5
 	golang.org/x/net v0.0.0-20191209160850-c0dbc17a3553
+	golang.org/x/sys v0.0.0-20190215142949-d0b11bdaac8a
 	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 )
