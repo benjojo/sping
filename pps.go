@@ -24,7 +24,7 @@ func setupPPS() {
 	ppsFD = &a
 	ppsFile = f
 
-	PP := PPSKParams{}
+	PP := unix.PPSKParams{}
 	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_GETPARAMS), uintptr(unsafe.Pointer(&PP)))
 	log.Printf("PPS Cap: %#v", PP)
 	PP.Mode = 0x01  // PPS_CAPTUREASSERT
@@ -47,7 +47,7 @@ func waitForPPSPulse() time.Time {
 		setupPPS()
 	}
 
-	a := PPSFData{}
+	a := unix.PPSFData{}
 	// a.Timeout.Sec = time.Now().Unix() + 2
 	a.Timeout.Sec = 3
 	_, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_FETCH), uintptr(unsafe.Pointer(&a)))
@@ -58,31 +58,4 @@ func waitForPPSPulse() time.Time {
 		log.Printf("%#v", a)
 	}
 	return time.Unix(a.Info.Assert_tu.Sec, int64(a.Info.Assert_tu.Nsec))
-}
-
-type PPSKInfo struct {
-	Assert_sequence uint32
-	Clear_sequence  uint32
-	Assert_tu       PPSKTime
-	Clear_tu        PPSKTime
-	Current_mode    int32
-	_               [4]byte
-}
-
-type PPSFData struct {
-	Info    PPSKInfo
-	Timeout PPSKTime
-}
-
-type PPSKParams struct {
-	Api_version   int32
-	Mode          int32
-	Assert_off_tu PPSKTime
-	Clear_off_tu  PPSKTime
-}
-
-type PPSKTime struct {
-	Sec   int64
-	Nsec  int32
-	Flags uint32
 }

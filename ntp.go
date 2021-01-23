@@ -109,7 +109,7 @@ func (s byNTPOffset) Less(i, j int) bool {
 	return s[i].Offset < s[j].Offset
 }
 
-var flagClockIsPerfect = flag.Bool("clock-is-perfect", false, "Disable calibartion against Apple's GPS NTP servers")
+var flagClockIsPerfect = flag.Bool("clock-is-perfect", true, "Enable userspace calibartion against Apple's GPS NTP servers")
 
 // Returns out offset against apple's NTP (+ GPS) servers
 func calibrateAgainstApple() int {
