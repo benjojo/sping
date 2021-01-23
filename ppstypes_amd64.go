@@ -1,8 +1,0 @@
-package main
-
-const (
-	PPS_GETPARAMS = 0x800870a1
-	PPS_SETPARAMS = 0x400870a2
-	PPS_GETCAP    = 0x800870a3
-	PPS_FETCH     = 0xc00870a4
-)

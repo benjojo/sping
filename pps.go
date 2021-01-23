@@ -25,13 +25,13 @@ func setupPPS() {
 	ppsFile = f
 
 	PP := PPSKParams{}
-	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_GETPARAMS), uintptr(unsafe.Pointer(&PP)))
+	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_GETPARAMS), uintptr(unsafe.Pointer(&PP)))
 	log.Printf("PPS Cap: %#v", PP)
 	PP.Mode = 0x01  // PPS_CAPTUREASSERT
 	PP.Mode |= 0x10 // PPS_OFFSETASSERT
 	PP.Assert_off_tu.Nsec = 0
 	PP.Assert_off_tu.Sec = 0
-	_, _, err2 := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_SETPARAMS), uintptr(unsafe.Pointer(&PP)))
+	_, _, err2 := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_SETPARAMS), uintptr(unsafe.Pointer(&PP)))
 	log.Printf("PPS Set Cap: %#v", PP)
 	if err2 != 0 {
 		log.Fatalf("Failed to setup pps device %v", err)
@@ -50,7 +50,7 @@ func waitForPPSPulse() time.Time {
 	a := PPSFData{}
 	// a.Timeout.Sec = time.Now().Unix() + 2
 	a.Timeout.Sec = 3
-	_, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(PPS_FETCH), uintptr(unsafe.Pointer(&a)))
+	_, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_FETCH), uintptr(unsafe.Pointer(&a)))
 	if err != 0 {
 		log.Printf("PPS Pulse failed! %v / FD %v", err, *ppsFD)
 	}
