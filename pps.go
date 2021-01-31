@@ -48,7 +48,6 @@ func waitForPPSPulse() time.Time {
 	}
 
 	a := unix.PPSFData{}
-	// a.Timeout.Sec = time.Now().Unix() + 2
 	a.Timeout.Sec = 3
 	_, _, err := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_FETCH), uintptr(unsafe.Pointer(&a)))
 	if err != 0 {

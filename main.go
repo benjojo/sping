@@ -13,15 +13,10 @@ import (
 	"golang.org/x/time/rate"
 )
 
-/*
- [+] Auth packet
-	[+] Respond with cookie to use
-	[+] If failed, just don't repsond
- [+] Ping packets
-*/
 var packetLimiter = rate.NewLimiter(100, 300)
 
 var debugFlagSlotShow = flag.Bool("debug.showslots", false, "Show incoming packet latency slots")
+var debugShowLiveStats = flag.Bool("debug.showstats", false, "Show per ping info, and timestamps")
 
 func main() {
 	udpPPSin := flag.Int("udp.pps", 100, "max inbound PPS that can be processed at once")
@@ -52,24 +47,59 @@ func main() {
 		}
 	}
 
+	go sessionGC()
+
 	for {
+
 		a := timeNowCorrected().Unix()
 		u := time.Until(time.Unix(a+1, 0).Add(timeOffset * -1))
 		time.Sleep(u)
-		fmt.Printf("it is now: %s\n", time.Now())
+		if *debugShowLiveStats {
+			fmt.Printf("it is now: %s\n", time.Now())
+		}
+	}
+}
+
+func sessionGC() {
+	for {
+		time.Sleep(time.Minute)
+		sessionLock.Lock()
+		for ID, ses := range sessionMap {
+			if time.Since(ses.LastRX) > time.Minute {
+				log.Printf("GC - Session with %s for inactivity", ses.PeerAddress)
+				delete(sessionMap, ID)
+				continue
+			}
+			if !ses.UDPActivated {
+				if time.Since(ses.SessionMade) > time.Second*20 {
+					log.Printf("GC - Session with %s for lack of handshake", ses.PeerAddress)
+					delete(sessionMap, ID)
+					continue
+				}
+			}
+		}
+		sessionLock.Unlock()
 	}
 }
 
 type session struct {
-	Init        bool
-	PeerAddress net.IP
+	TCPActivated bool      // aka it's been made after a TCP Handshake
+	UDPActivated bool      // aka it's been confirmed with a UDP Handshake
+	MadeByMe     bool      // If I made the session, aka if I should send the UDP Handshake
+	UDPHandshake chan bool // Used to confirm a UDP handshake
+	PeerAddress  net.IP    // Used only to start a session
+	SessionMade  time.Time // Used to eventually give up on a session
+
+	// Network Mobility data
+	ReplyWith net.PacketConn
+	ReplyTo   *net.UDPAddr
+
+	// Time keeping data
 	LastAcks    [32]pingInfo
 	LastRX      time.Time
 	CurrentID   uint8
 	SessionID   uint32
 	nextAckSlot int
-	ReplyWith   net.PacketConn
-	ReplyTo     net.Addr
 }
 
 var globalReplyWith *net.PacketConn
@@ -84,17 +114,7 @@ func (s *session) getNextAckSlot() int {
 }
 
 func (s *session) sendPackets() {
-	peerAddr, err := net.ResolveUDPAddr("udp", s.PeerAddress.String()+":6924")
-	if err != nil {
-		log.Fatalf("Failed to parse peer address %v / %#v", err, s)
-	}
-	udpConn, err := net.DialUDP("udp", nil, peerAddr)
-	if err != nil {
-		log.Printf("Failed to setup packet sending to %#v", s)
-		return
-	}
-
-	startTime := time.Now()
+	timeStarted := time.Now()
 	for {
 		if *usePPS {
 			waitForPPSPulse()
@@ -104,16 +124,14 @@ func (s *session) sendPackets() {
 			time.Sleep(u)
 		}
 
-		if !s.Init {
-			if time.Since(startTime) > time.Second*30 {
-				// TODO: Handle this better
-				return
-			}
+		if (time.Since(s.LastRX) > time.Second*60) && (time.Since(timeStarted) > time.Second*10) {
+			return
 		}
 
 		// Send pings
 		s.CurrentID = uint8(time.Now().Unix()%255) + 1
 		packet := pingStruct{
+			Type:     't',
 			Magic:    11181,
 			Session:  s.SessionID,
 			ID:       s.CurrentID,
@@ -128,80 +146,10 @@ func (s *session) sendPackets() {
 
 		if s.ReplyTo != nil {
 			s.ReplyWith.WriteTo(b, s.ReplyTo)
-		} else if globalReplyWith != nil {
-			a := *globalReplyWith
-			a.WriteTo(b, peerAddr)
 		} else {
-			udpConn.Write(b)
+			log.Printf("s.ReplyTo is nil")
 		}
 	}
-}
-
-func startSession(host string) {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		log.Printf("%#v is not a valid IP address", host)
-		return
-	}
-
-	conn, err := net.Dial("tcp", host+":6924")
-	if err != nil {
-		log.Printf("Cannot connect to %v: %v", host, err)
-		return
-	}
-
-	bannerBuf := make([]byte, 10000)
-
-	n, err := conn.Read(bannerBuf)
-	if n > 9000 {
-		log.Printf("%v: Host banner too big", host)
-		conn.Close()
-		return
-	}
-
-	if !strings.HasPrefix(string(bannerBuf[:n]), "sping-") {
-		log.Printf("%v: Host banner not sping", host)
-		conn.Close()
-		return
-	}
-
-	defer conn.Close()
-
-	startPacket := handshakeStruct{
-		Magic:   11181,
-		Version: 2,
-		Session: 0,
-	}
-
-	b, err := msgpack.Marshal(startPacket)
-	if err == nil {
-		conn.Write(b)
-	} else {
-		return
-	}
-
-	initBuf := make([]byte, 10000)
-
-	n, err = conn.Read(initBuf)
-	if err != nil {
-		log.Printf("Handshake failed to %v: %v", host, err)
-		return
-	}
-	initPacket := handshakeStruct{}
-	err = msgpack.Unmarshal(initBuf[:n], &initPacket)
-	if err != nil {
-		log.Printf("Corrupt handshake from %v: %v", host, err)
-		return
-	}
-
-	sessionLock.Lock()
-	sessionMap[initPacket.Session] = &session{
-		Init:        false,
-		PeerAddress: conn.RemoteAddr().(*net.TCPAddr).IP,
-		SessionID:   initPacket.Session,
-	}
-	sessionLock.Unlock()
-	go sessionMap[initPacket.Session].sendPackets()
 }
 
 var sessionMap map[uint32]*session
@@ -223,17 +171,18 @@ func listenAndRoute() {
 
 		if err != nil {
 			log.Fatalf("Failed to rx from UDP, %v", err)
+			time.Sleep(time.Millisecond * 777)
 		}
 
 		if !packetLimiter.Allow() {
 			continue
 		}
 
-		go handlePacket(buf[:n], rxAddr, uListener)
+		go handlePacket(buf[:n], rxAddr.(*net.UDPAddr), uListener)
 	}
 }
 
-func handlePacket(buf []byte, rxAddr net.Addr, lSocket net.PacketConn) {
+func handlePacket(buf []byte, rxAddr *net.UDPAddr, lSocket net.PacketConn) {
 	timeRX := timeNowCorrected()
 
 	rx := pingStruct{}
@@ -248,18 +197,25 @@ func handlePacket(buf []byte, rxAddr net.Addr, lSocket net.PacketConn) {
 		return
 	}
 
-	if sessionMap[rx.Session] != nil {
-		if !sessionMap[rx.Session].Init {
-			log.Printf("Setting session as active")
-			if sessionMap[rx.Session].SessionID != rx.Session {
-				log.Printf("Invalid packet for the session ID from %v", rxAddr.String())
-				return
-			}
-			ses := sessionMap[rx.Session]
-			ses.Init = true
-			sessionMap[rx.Session] = ses
-		}
-	} else {
+	if rx.Type == 'h' {
+		// Differnet handler for handshakes
+		handleInboundHandshake(buf, rxAddr, lSocket)
+		return
+	}
+	if rx.Type != 't' {
+		// It's not a time packet? Must be corrupted then
+		log.Printf("Corrupted Packet? Not time type: %#v", rx)
+		return
+	}
+
+	ses := sessionMap[rx.Session]
+
+	if ses == nil {
+		log.Printf("Ping packet sent without an active session by %s", rxAddr)
+		return
+	}
+	if ses.UDPActivated == false && ses.TCPActivated {
+		log.Printf("Ping packet sent but session is not double activated %s", rxAddr)
 		return
 	}
 
@@ -268,21 +224,68 @@ func handlePacket(buf []byte, rxAddr net.Addr, lSocket net.PacketConn) {
 		TX: rx.TXTime,
 		RX: timeRX,
 	}
-
-	session := sessionMap[rx.Session]
-	RXL, TXL, RXLoss, TXLoss, exchanges := getStats(timeRX, rx, session)
-	log.Printf("[%s] RX: %s TX: %s [Loss RX: %d/%d | Loss TX %d/%d]", session.PeerAddress, RXL, TXL, RXLoss, exchanges, TXLoss, exchanges)
-	session.LastAcks[session.getNextAckSlot()] = pI
-	session.ReplyWith = lSocket
-	session.ReplyTo = rxAddr
-
-	sessionMap[rx.Session] = session
+	ses.LastAcks[ses.getNextAckSlot()] = pI
+	ses.ReplyWith = lSocket
+	ses.ReplyTo = rxAddr
+	ses.LastRX = timeRX
 
 	if *debugFlagSlotShow {
-		for n, v := range session.LastAcks {
+		for n, v := range ses.LastAcks {
 			fmt.Printf("\t[Slot %d] ID: %d - TX: %s\n", n, v.ID, v.TX.Sub(v.RX))
 		}
 	}
+
+	if *debugShowLiveStats {
+		RXL, TXL, RXLoss, TXLoss, exchanges := getStats(timeRX, rx, ses)
+		log.Printf("[%s] RX: %s TX: %s [Loss RX: %d/%d | Loss TX %d/%d]", ses.PeerAddress, RXL, TXL, RXLoss, exchanges, TXLoss, exchanges)
+	}
+
+}
+
+func handleInboundHandshake(buf []byte, rxAddr *net.UDPAddr, lSocket net.PacketConn) {
+
+	rx := handshakeStruct{}
+	err := msgpack.Unmarshal(buf, &rx)
+	if err != nil {
+		log.Printf("Failed to parse packet from %v", rxAddr.String())
+		return
+	}
+
+	if rx.Magic != 11181 {
+		log.Printf("Invalid magic from %v", rxAddr.String())
+		return
+	}
+
+	if rx.Version != 3 {
+		log.Printf("Invalid UDP handshake version from %v", rxAddr.String())
+		return
+	}
+
+	ses := sessionMap[rx.Session]
+	wasAlreadyActivated := ses.UDPActivated
+	if ses == nil {
+		log.Printf("Handshake packet sent without an active session by %s", rxAddr)
+		return
+	}
+	if ses.UDPActivated && ses.TCPActivated {
+		log.Printf("Handshake packet sent but session *is* double activated %s", rxAddr)
+		return
+	}
+
+	// Well cool, Looks good, let's activate our end and send the same thing back to them
+	ses.ReplyTo = rxAddr
+	ses.ReplyWith = *globalReplyWith
+	ses.UDPActivated = true
+	select {
+	case ses.UDPHandshake <- true:
+	default:
+		log.Printf("Tried to activate socket, but failed to because activation notification pipe was full")
+	}
+
+	if !wasAlreadyActivated {
+		ses.ReplyWith.WriteTo(buf, ses.ReplyTo)
+	}
+
 }
 
 func getStats(timeRX time.Time, rx pingStruct, ses *session) (RXLatency time.Duration, TXLatency time.Duration, RXLoss int, TXLoss int, TotalSent int) {
@@ -347,6 +350,7 @@ func dumbLastAckSearchForID(targetID uint8, LastAcks [32]pingInfo) bool {
 }
 
 type pingStruct struct {
+	Type         uint8        `msgpack:"Y"` // MUST be 't' for a time sync
 	Magic        uint16       `msgpack:"M"`
 	Session      uint32       `msgpack:"S"`
 	ID           uint8        `msgpack:"I"`
