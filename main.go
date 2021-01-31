@@ -276,6 +276,10 @@ func handleInboundHandshake(buf []byte, rxAddr *net.UDPAddr, lSocket net.PacketC
 	ses.ReplyTo = rxAddr
 	ses.ReplyWith = *globalReplyWith
 	ses.UDPActivated = true
+	if ses.PeerAddress == nil {
+		ses.PeerAddress = rxAddr.IP
+	}
+
 	select {
 	case ses.UDPHandshake <- true:
 	default:
