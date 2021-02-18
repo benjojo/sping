@@ -3,6 +3,8 @@ split-sping
 
 split-ping is a tool that can tell you what direction packet latency or loss is on. This is handy for network debugging and locating congestion.
 
+It was built as part of a personal blog post: https://blog.benjojo.co.uk/post/ping-with-loss-latency-split
+
 split-ping's binary name is shorted to sping for ease, it's help page is as follows:
 
 ```
