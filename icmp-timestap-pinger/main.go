@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net"
@@ -25,7 +26,6 @@ func Ping(addr string, seq int) (_ *net.IPAddr, _ time.Duration, _ *icmp.Timesta
 	// Resolve any DNS (if used) and get the real IP of the target
 	dst, err := net.ResolveIPAddr("ip4", addr)
 	if err != nil {
-		panic(err)
 		return nil, 0, nil, err
 	}
 	// get the time
@@ -96,11 +96,28 @@ func main() {
 
 		}
 	}
+	flag.Usage = func() {
+		fmt.Print(`icmp-timestap-pinger <hosts>
 
-	p("reddit.com")
-	p("klir.benjojo.co.uk")
-	p("airmail.benjojo.co.uk")
-	p("flux.basil.pw")
-	p("syd-au-ping.vultr.com")
+No flags, Will send a ICMP Timestamp request to hosts and estimate forward and back latency,
+Can only work correctly if both the host and client have near perfectly syncd clocks.
+`)
+		os.Exit(1)
+	}
+	flag.Parse()
+	hosts := flag.Args()
+	if len(hosts) == 0 {
+		flag.Usage()
+	}
+
+	for _, v := range hosts {
+		p(v)
+	}
+
+	// p("reddit.com")
+	// p("klir.benjojo.co.uk")
+	// p("airmail.benjojo.co.uk")
+	// p("flux.basil.pw")
+	// p("syd-au-ping.vultr.com")
 
 }
