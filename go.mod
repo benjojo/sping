@@ -4,9 +4,9 @@ go 1.13
 
 require (
 	github.com/beevik/ntp v0.3.0
-	github.com/golang/protobuf v1.4.3 // indirect
 	github.com/google/go-cmp v0.5.4 // indirect
 	github.com/kr/text v0.2.0 // indirect
+	github.com/prometheus/client_golang v1.9.0
 	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/vmihailenco/msgpack/v4 v4.3.12
 	github.com/vmihailenco/tagparser v0.1.2 // indirect

@@ -26,13 +26,17 @@ func setupPPS() {
 
 	PP := unix.PPSKParams{}
 	unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_GETPARAMS), uintptr(unsafe.Pointer(&PP)))
-	log.Printf("PPS Cap: %#v", PP)
+	if *ppsDebug {
+		log.Printf("PPS Cap: %#v", PP)
+	}
 	PP.Mode = 0x01  // PPS_CAPTUREASSERT
 	PP.Mode |= 0x10 // PPS_OFFSETASSERT
 	PP.Assert_off_tu.Nsec = 0
 	PP.Assert_off_tu.Sec = 0
 	_, _, err2 := unix.Syscall(unix.SYS_IOCTL, uintptr(*ppsFD), uintptr(unix.PPS_SETPARAMS), uintptr(unsafe.Pointer(&PP)))
-	log.Printf("PPS Set Cap: %#v", PP)
+	if *ppsDebug {
+		log.Printf("PPS Set Cap: %#v", PP)
+	}
 	if err2 != 0 {
 		log.Fatalf("Failed to setup pps device %v", err)
 	}

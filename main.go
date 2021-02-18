@@ -49,6 +49,13 @@ func main() {
 
 	go sessionGC()
 
+	if *usePPS {
+		go ppsClockTicker()
+	} else {
+		go sysClockTicker()
+	}
+
+	go handlePrometheus()
 	for {
 
 		a := timeNowCorrected().Unix()
@@ -57,6 +64,55 @@ func main() {
 		if *debugShowLiveStats {
 			fmt.Printf("it is now: %s\n", time.Now())
 		}
+	}
+}
+
+func ppsClockTicker() {
+	sessionList := make([]*session, 0)
+	setupPPS()
+
+	for {
+		waitForPPSPulse()
+
+		for _, v := range sessionList {
+			select {
+			case v.pulse <- true:
+			default:
+				// Well /shrug I guess
+			}
+		}
+
+		sessionLock.Lock()
+		sessionList = make([]*session, 0)
+		for _, v := range sessionMap {
+			sessionList = append(sessionList, v)
+		}
+		sessionLock.Unlock()
+	}
+}
+
+func sysClockTicker() {
+	sessionList := make([]*session, 0)
+
+	for {
+		a := timeNowCorrected().Unix()
+		u := time.Until(time.Unix(a+1, 0).Add(timeOffset * -1))
+		time.Sleep(u)
+
+		for _, v := range sessionList {
+			select {
+			case v.pulse <- true:
+			default:
+				// Well /shrug I guess
+			}
+		}
+
+		sessionLock.Lock()
+		sessionList = make([]*session, 0)
+		for _, v := range sessionMap {
+			sessionList = append(sessionList, v)
+		}
+		sessionLock.Unlock()
 	}
 }
 
@@ -100,6 +156,10 @@ type session struct {
 	CurrentID   uint8
 	SessionID   uint32
 	nextAckSlot int
+	LastRXPing  pingStruct
+
+	// Time pulse channel
+	pulse chan bool
 }
 
 var globalReplyWith *net.PacketConn
@@ -228,6 +288,7 @@ func handlePacket(buf []byte, rxAddr *net.UDPAddr, lSocket net.PacketConn) {
 	ses.ReplyWith = lSocket
 	ses.ReplyTo = rxAddr
 	ses.LastRX = timeRX
+	ses.LastRXPing = rx
 
 	if *debugFlagSlotShow {
 		for n, v := range ses.LastAcks {
@@ -262,15 +323,16 @@ func handleInboundHandshake(buf []byte, rxAddr *net.UDPAddr, lSocket net.PacketC
 	}
 
 	ses := sessionMap[rx.Session]
-	wasAlreadyActivated := ses.UDPActivated
 	if ses == nil {
 		log.Printf("Handshake packet sent without an active session by %s", rxAddr)
 		return
 	}
+
 	if ses.UDPActivated && ses.TCPActivated {
 		log.Printf("Handshake packet sent but session *is* double activated %s", rxAddr)
 		return
 	}
+	wasAlreadyActivated := ses.UDPActivated
 
 	// Well cool, Looks good, let's activate our end and send the same thing back to them
 	ses.ReplyTo = rxAddr
