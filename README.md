@@ -1,4 +1,4 @@
-split-sping
+split-ping
 ===
 
 split-ping is a tool that can tell you what direction packet latency or loss is on. This is handy for network debugging and locating congestion.
