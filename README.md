@@ -34,9 +34,25 @@ Usage of ./sping:
         Path under which to expose metrics. (default "/metrics")
 ```
 
-## Metrics output
+## Example Output
 
+See the stats via the CLI:
+```bash
+# run this on each host, pointed at the other host as a peer
+$ ./sping -peers 198.16.109.36 -debug.showstats
+2021/03/03 19:04:10 Listening on[::]:9523
+it is now: 2021-03-03 19:04:11.000241999 +0000 GMT m=+0.500559754
+it is now: 2021-03-03 19:04:12.000174134 +0000 GMT m=+1.500491809
+2021/03/03 19:04:12 [198.16.109.36] RX: 8.131386ms TX: 0s [Loss RX: 0/0 | Loss TX 0/0]
+...
 ```
+
+See the stats via the Web interface:
+```bash
+$ ./sping -peers 198.16.109.36
+$ open http://127.0.0.1:9523/metrics
+```
+```logs
 # HELP splitping_latency The latency (in seconds) in each direction
 # TYPE splitping_latency gauge
 splitping_latency{direction="rx",host="23.132.96.179"} 0.068701256
