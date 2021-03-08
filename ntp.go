@@ -83,7 +83,10 @@ type ntpResult struct {
 	Host   string
 }
 
-var timeSyncs map[string]ntpResult
+type timeSyncs struct {
+	mu sync.Mutex
+	m  map[string]ntpResult
+}
 
 type byNTPRTT []ntpResult
 
@@ -118,8 +121,7 @@ func calibrateAgainstApple() int {
 		return 1
 	}
 
-	timeSyncs = make(map[string]ntpResult)
-	maplock := sync.Mutex{}
+	ts := timeSyncs{m: make(map[string]ntpResult)}
 
 	log.Printf("Calibrating myself against Apple")
 	for _, v := range ntpServers {
@@ -128,13 +130,13 @@ func calibrateAgainstApple() int {
 			if failed > 1 || RTT == 0 || offset == 0 {
 				return
 			}
-			maplock.Lock()
-			timeSyncs[server] = ntpResult{
+			ts.mu.Lock()
+			ts.m[server] = ntpResult{
 				RTT:    RTT,
 				Offset: offset,
 				Host:   server,
 			}
-			maplock.Unlock()
+			ts.mu.Unlock()
 		}(v)
 
 		time.Sleep(time.Millisecond * time.Duration(10+rand.Intn(50)))
@@ -145,7 +147,7 @@ func calibrateAgainstApple() int {
 	log.Printf("-----------------------------------------")
 
 	NTPresArray := make([]ntpResult, 0)
-	for _, v := range timeSyncs {
+	for _, v := range ts.m {
 		NTPresArray = append(NTPresArray, v)
 	}
 
