@@ -13,11 +13,10 @@ import (
 	"github.com/vmihailenco/msgpack/v4"
 )
 
-func startSession(host string) {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		log.Printf("%#v is not a valid IP address", host)
-		return
+func startSession(ip net.IP, port int) {
+	var host = ip.String()
+	if ip.To4() == nil { // is IPv6 address
+		host = fmt.Sprintf("[%v]", host) // this notation is needed for net.Dial
 	}
 
 	first := true
@@ -27,9 +26,9 @@ func startSession(host string) {
 		}
 		first = false
 
-		conn, err := net.Dial("tcp", host+":6924")
+		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
 		if err != nil {
-			log.Printf("Cannot (TCP) handshake to %v: %v", host, err)
+			log.Printf("Cannot (TCP) handshake to %v:%v: %v", host, port, err)
 			continue
 		}
 
@@ -76,6 +75,7 @@ func startSession(host string) {
 		sessionLock.Lock()
 		sessionMap[uint32(invite)] = &session{
 			PeerAddress:  ip,
+			PeerPort:     port,
 			SessionID:    uint32(invite),
 			TCPActivated: true,
 			MadeByMe:     true,
@@ -132,7 +132,7 @@ func (s *session) sendUDPHandshake() {
 
 			ua := net.UDPAddr{
 				IP:   s.PeerAddress,
-				Port: 6924,
+				Port: s.PeerPort,
 			}
 
 			s.ReplyWith.WriteTo(b, &ua)

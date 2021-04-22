@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -39,10 +40,20 @@ func main() {
 	if len(*peers) != 0 {
 		peerList := strings.Split(*peers, ",")
 		for _, v := range peerList {
-			ip := net.ParseIP(v)
-			if ip != nil {
+			var ip net.IP = nil
+			var port = 6924                                // default port
+			host, port_string, err := net.SplitHostPort(v) // attempt to parse as host:port format
+			if err != nil {                                // likely address without port
+				ip = net.ParseIP(v) // assume ip address without port
+			} else {
+				port, _ = strconv.Atoi(port_string)
+				ip = net.ParseIP(host)
+			}
+			if ip != nil && port > 0 {
 				// Start a session with this host
-				go startSession(v)
+				go startSession(ip, port)
+			} else {
+				log.Printf("%#v is not a valid IP address or IP:port", v)
 			}
 		}
 	}
@@ -144,6 +155,7 @@ type session struct {
 	MadeByMe     bool      // If I made the session, aka if I should send the UDP Handshake
 	UDPHandshake chan bool // Used to confirm a UDP handshake
 	PeerAddress  net.IP    // Used only to start a session
+	PeerPort     int       // Port of peer, only used for connection initiated by this instance
 	SessionMade  time.Time // Used to eventually give up on a session
 
 	// Network Mobility data
