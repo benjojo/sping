@@ -13,13 +13,7 @@ import (
 	"github.com/vmihailenco/msgpack/v4"
 )
 
-func startSession(host string) {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		log.Printf("%#v is not a valid IP address", host)
-		return
-	}
-
+func startSession(ip net.IP) {
 	first := true
 	for {
 		if !first {
@@ -27,22 +21,22 @@ func startSession(host string) {
 		}
 		first = false
 
-		conn, err := net.Dial("tcp", host+":6924")
+		conn, err := net.Dial("tcp", net.JoinHostPort(ip.String(), "6924"))
 		if err != nil {
-			log.Printf("Cannot (TCP) handshake to %v: %v", host, err)
+			log.Printf("Cannot (TCP) handshake to %v: %v", ip, err)
 			continue
 		}
 
 		bannerBuf := make([]byte, 10000)
 		n, err := conn.Read(bannerBuf)
 		if n > 9000 {
-			log.Printf("%v: Host banner too big", host)
+			log.Printf("%v: Host banner too big", ip.String())
 			conn.Close()
 			continue
 		}
 
 		if !strings.HasPrefix(string(bannerBuf[:n]), "sping-0.3-") {
-			log.Printf("%v: Host banner not sping", host)
+			log.Printf("%v: Host banner not sping", ip.String())
 			conn.Close()
 			continue
 		}
@@ -51,7 +45,7 @@ func startSession(host string) {
 		// [+] Send Session Starting Request
 		_, err = conn.Write([]byte("INVITE\r\n"))
 		if err != nil {
-			log.Printf("%v: Failed to ask for invite", host)
+			log.Printf("%v: Failed to ask for invite", ip.String())
 			conn.Close()
 			continue
 		}
@@ -59,7 +53,7 @@ func startSession(host string) {
 		inviteBuf := make([]byte, 10)
 		n, err = conn.Read(inviteBuf)
 		if n > 31 || n == 0 {
-			log.Printf("%v: Invite banner wrong size %d", host, n)
+			log.Printf("%v: Invite banner wrong size %d", ip.String(), n)
 			conn.Close()
 			continue
 		}
@@ -67,7 +61,7 @@ func startSession(host string) {
 		conn.Close()
 		invite, err := strconv.ParseUint(string(inviteBuf[:n]), 10, 32)
 		if err != nil {
-			log.Printf("%v: Invite session bad", host)
+			log.Printf("%v: Invite session bad", ip.String())
 			continue
 		}
 

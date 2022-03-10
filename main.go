@@ -42,7 +42,7 @@ func main() {
 			ip := net.ParseIP(v)
 			if ip != nil {
 				// Start a session with this host
-				go startSession(v)
+				go startSession(ip)
 			}
 		}
 	}
